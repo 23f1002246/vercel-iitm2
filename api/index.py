@@ -25,8 +25,10 @@ class ImageQA(BaseModel):
 async def answer_image(body: ImageQA):
     prompt = (
         f"{body.question}\n\n"
-        "Return ONLY the raw answer — no units, no currency symbols, no extra text. "
-        "For numeric answers return just the number (e.g. 4089.35)."
+        "Look carefully at every number visible in the image. "
+        "If asked for a total or sum, add up ALL the values shown. "
+        "Return ONLY the raw numeric answer — no currency symbols, no units, no explanation. "
+        "Example: if the total is 4089.35, return exactly: 4089.35"
     )
     payload = {
         "model": "gpt-4o-mini",
