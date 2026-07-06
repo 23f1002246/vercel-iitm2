@@ -1,5 +1,5 @@
-# api/index.py — COMBINED: /answer-image + /extract
-import os, json, httpx 
+# api/index.py — COMBINED: /answer-image (original working) + /extract
+import os, json, httpx
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -24,40 +24,35 @@ class ImageQA(BaseModel):
 class InvoiceRequest(BaseModel):
     invoice_text: str
 
-# ─── /answer-image ────────────────────────────────────────────────────────────
-
-IMAGE_SYSTEM = """You are a precise data extraction assistant for images.
-Your job is to answer questions about charts, receipts, invoices, tables, and diagrams.
-
-Rules:
-- Read EVERY number visible in the image carefully before answering.
-- For bar charts: read the exact value of EACH bar (check axis scale and labels). If asked for a total/sum, add ALL bars.
-- For receipts/invoices: find the specific field asked (subtotal, tax, grand total, item price, etc.).
-- For tables: read row/column values exactly as printed.
-- Return ONLY the raw numeric or text answer — no units, no currency symbols, no commas, no explanation.
-- For numbers: return as a plain decimal (e.g. 4089.35 not $4,089.35 or Rs. 4,089).
-- Do NOT round unless the answer is already a whole number.
-- If the question asks for a sum/total, compute it yourself from the individual values shown."""
+# ─── /answer-image (original version that passed 3/4) ────────────────────────
 
 @app.post("/answer-image")
 async def answer_image(body: ImageQA):
+    prompt = (
+        f"{body.question}\n\n"
+        "Return ONLY the raw answer value — no units, no currency symbols, "
+        "no extra text. For numeric answers return just the number (e.g. 4089.35)."
+    )
     payload = {
         "model": "gpt-4o-mini",
         "messages": [
-            {"role": "system", "content": IMAGE_SYSTEM},
             {
                 "role": "user",
                 "content": [
-                    {"type": "image_url",
-                     "image_url": {"url": f"data:image/png;base64,{body.image_base64}",
-                                   "detail": "high"}},
-                    {"type": "text",
-                     "text": f"{body.question}\n\nRemember: return ONLY the raw answer value, nothing else."}
+                    {
+                        "type": "image_url",
+                        "image_url": {
+                            "url": f"data:image/png;base64,{body.image_base64}"
+                        }
+                    },
+                    {
+                        "type": "text",
+                        "text": prompt
+                    }
                 ]
             }
         ],
-        "max_tokens": 200,
-        "temperature": 0
+        "max_tokens": 200
     }
     async with httpx.AsyncClient(timeout=60) as client:
         r = await client.post(
@@ -67,9 +62,6 @@ async def answer_image(body: ImageQA):
         )
         r.raise_for_status()
         answer = r.json()["choices"][0]["message"]["content"].strip()
-        # Strip any accidental currency symbols or commas
-        answer = answer.replace(",", "").replace("$", "").replace("£", "")
-        answer = answer.replace("₹", "").replace("€", "").replace("Rs.", "").strip()
     return {"answer": answer}
 
 # ─── /extract ─────────────────────────────────────────────────────────────────
@@ -104,8 +96,7 @@ async def extract_invoice(body: InvoiceRequest):
             {"role": "user",   "content": body.invoice_text}
         ],
         "response_format": {"type": "json_object"},
-        "max_tokens": 300,
-        "temperature": 0
+        "max_tokens": 300
     }
     async with httpx.AsyncClient(timeout=30) as client:
         r = await client.post(
