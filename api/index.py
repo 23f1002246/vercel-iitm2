@@ -1,5 +1,5 @@
 # api/index.py — COMBINED: /answer-image + /extract
-import os, json, httpx
+import os, json, httpx 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
